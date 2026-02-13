@@ -12,4 +12,16 @@
         <toolWindow factoryClass="com.github.meteors87.assmartlogcheck.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.github.meteors87.assmartlogcheck.startup.MyProjectActivity" />
     </extensions>
+
+    <!-- 操作（菜单项/快捷键） -->
+    <actions>
+        <!-- 可选：添加一个菜单项来打开面板 -->
+        <action id="MySidePanel.Open"
+                class="com.github.meteors87.assmartlogcheck.toolWindow.ReadLogcatAction"
+                text="Open My Side Panel"
+                description="Open the side panel">
+            <add-to-group group-id="ViewMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift M"/>
+        </action>
+    </actions>
 </idea-plugin>

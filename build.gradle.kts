@@ -16,12 +16,13 @@ version = providers.gradleProperty("pluginVersion").get()
 
 // Set the JVM language level used to build the project.
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(17)
 }
 
 // Configure project's dependencies
 repositories {
     mavenCentral()
+    google()
 
     // IntelliJ Platform Gradle Plugin Repositories Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-repositories-extension.html
     intellijPlatform {
@@ -34,10 +35,12 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
 
+    implementation("com.android.tools.ddms:ddmlib:26.2.1")
+
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        intellijIdea(providers.gradleProperty("platformVersion"))
-
+//        intellijIdea(providers.gradleProperty("platformVersion"))
+        local("/Applications/Android Studio.app/Contents")
         // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file for bundled IntelliJ Platform plugins.
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',') })
 

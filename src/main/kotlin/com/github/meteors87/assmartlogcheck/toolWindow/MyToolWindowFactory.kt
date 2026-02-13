@@ -20,26 +20,26 @@ class MyToolWindowFactory : ToolWindowFactory {
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val myToolWindow = MyToolWindow(toolWindow)
+        // 创建我们的自定义面板
+        val myToolWindow = MyToolWindowPanel(project)
         val content = ContentFactory.getInstance().createContent(myToolWindow.getContent(), null, false)
         toolWindow.contentManager.addContent(content)
+        // 可选：设置 Tool Window 的标题按钮
+        setupToolWindowActions(toolWindow)
+    }
+    private fun setupToolWindowActions(toolWindow: ToolWindow) {
+        // 可以在这里添加刷新按钮等
+        val refreshAction = object : com.intellij.openapi.actionSystem.AnAction(
+            "Refresh",
+            "Refresh panel content",
+            com.intellij.icons.AllIcons.Actions.Refresh
+        ) {
+            override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            }
+        }
+
+        toolWindow.setTitleActions(listOf(refreshAction))
     }
 
     override fun shouldBeAvailable(project: Project) = true
-
-    class MyToolWindow(toolWindow: ToolWindow) {
-
-        private val service = toolWindow.project.service<MyProjectService>()
-
-        fun getContent() = JBPanel<JBPanel<*>>().apply {
-            val label = JBLabel(MyBundle.message("randomLabel", "?"))
-
-            add(label)
-            add(JButton(MyBundle.message("shuffle")).apply {
-                addActionListener {
-                    label.text = MyBundle.message("randomLabel", service.getRandomNumber())
-                }
-            })
-        }
-    }
 }

@@ -39,6 +39,10 @@ class MyToolWindowPanel(private val project: Project) {
     private lateinit var logDoc: StyledDocument
     private val linkPositions = mutableListOf<Triple<Int, Int, String>>()
 
+    // MODIFIED: 添加成员变量以便在其他方法中控制
+    private lateinit var mainSplitPane: JSplitPane
+    private lateinit var criteriaWrapper: JPanel
+
     // 搜索框组件
     private lateinit var criteriaContainer: JPanel
     private lateinit var searchBox: JPanel
@@ -84,6 +88,12 @@ class MyToolWindowPanel(private val project: Project) {
 
         criteriaContainer = JBPanel<JBPanel<*>>(BorderLayout())
 
+        // MODIFIED: 创建包装器，用于控制整体显示/隐藏
+        criteriaWrapper = JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            add(criteriaContainer, BorderLayout.CENTER)
+            minimumSize = Dimension(0, 0)
+        }
+
         val searchButton = JButton("Search").apply {
             addActionListener { toggleSearchBox() }
         }
@@ -108,7 +118,6 @@ class MyToolWindowPanel(private val project: Project) {
         buttonPanel.add(clearButton)
 
         contentPanel.add(buttonPanel, gbc.apply { gridy = 2 })
-        contentPanel.add(criteriaContainer, gbc.apply { gridy = 3 })
 
         // 日志显示区域
         val logPane = JTextPane().apply {
@@ -143,24 +152,24 @@ class MyToolWindowPanel(private val project: Project) {
         val scrollPane = JBScrollPane(logPane)
         scrollPane.border = BorderFactory.createTitledBorder("Logcat 日志")
 
-        contentPanel.add(scrollPane, gbc.apply {
-            gridy = 4
-            weighty = 1.0
-            fill = GridBagConstraints.BOTH
-        })
-
-        val splitPane = JSplitPane(JSplitPane.VERTICAL_SPLIT, criteriaContainer, scrollPane).apply {
-            setDividerLocation(0.5)
-            resizeWeight = 0.5
-            dividerSize = 1
+        // MODIFIED: 使用成员变量保存 splitPane 引用，优化配置
+        mainSplitPane = JSplitPane(JSplitPane.VERTICAL_SPLIT, criteriaWrapper, scrollPane).apply {
+            dividerSize = 4  // MODIFIED: 从 1 改为 4，便于拖动
+            resizeWeight = 1.0  // MODIFIED: 底部（日志区域）优先获得额外空间
+            isOneTouchExpandable = true  // MODIFIED: 启用一键展开/收起按钮（在分隔条上）
             border = JBUI.Borders.empty()
+            // 确保日志区域有最小高度
+            scrollPane.minimumSize = Dimension(0, 100)
         }
 
-        contentPanel.add(splitPane, gbc.apply {
+        contentPanel.add(mainSplitPane, gbc.apply {
             gridy = 4
             weighty = 1.0
             fill = GridBagConstraints.BOTH
         })
+
+        // MODIFIED: 初始化时更新一次 splitPane 状态（默认隐藏）
+        updateSplitPaneVisibility()
 
         startReadingLogcat(logPane)
 
@@ -173,6 +182,30 @@ class MyToolWindowPanel(private val project: Project) {
         panel.add(statusLabel, BorderLayout.SOUTH)
 
         return panel
+    }
+
+    /**
+     * MODIFIED: 新增方法 - 根据条件更新 SplitPane 的可见性和位置
+     */
+    private fun updateSplitPaneVisibility() {
+        val hasCriteria = isSearchVisible || isFilterVisible
+
+        if (hasCriteria) {
+            criteriaWrapper.isVisible = true
+            // 根据是一个还是两个条件，设置合适的高度
+            val targetHeight = if (isSearchVisible && isFilterVisible) 200 else 120
+            mainSplitPane.dividerLocation = targetHeight
+        } else {
+            // MODIFIED: 完全隐藏顶部区域，将分隔条移到最顶部
+            criteriaWrapper.isVisible = false
+            mainSplitPane.dividerLocation = 0
+        }
+
+        // 强制刷新布局
+        SwingUtilities.invokeLater {
+            mainSplitPane.revalidate()
+            mainSplitPane.repaint()
+        }
     }
 
     /**
@@ -369,30 +402,18 @@ class MyToolWindowPanel(private val project: Project) {
     }
 
     /**
-     * 切换 Search 框显示/隐藏
+     * MODIFIED: 简化切换逻辑 - 直接取反状态
      */
     private fun toggleSearchBox() {
-        if (isFilterVisible && !isSearchVisible) {
-            isSearchVisible = true
-        } else if (isFilterVisible && isSearchVisible) {
-            isSearchVisible = false
-        } else {
-            isSearchVisible = !isSearchVisible
-        }
+        isSearchVisible = !isSearchVisible
         updateCriteriaLayout()
     }
 
     /**
-     * 切换 Filter 框显示/隐藏
+     * MODIFIED: 简化切换逻辑 - 直接取反状态
      */
     private fun toggleFilterBox() {
-        if (isSearchVisible && !isFilterVisible) {
-            isFilterVisible = true
-        } else if (isSearchVisible && isFilterVisible) {
-            isFilterVisible = false
-        } else {
-            isFilterVisible = !isFilterVisible
-        }
+        isFilterVisible = !isFilterVisible
         updateCriteriaLayout()
     }
 
@@ -414,6 +435,7 @@ class MyToolWindowPanel(private val project: Project) {
 
     /**
      * 更新搜索框布局（分屏/单屏切换）
+     * MODIFIED: 添加对 mainSplitPane 的控制
      */
     private fun updateCriteriaLayout() {
         criteriaContainer.removeAll()
@@ -423,7 +445,7 @@ class MyToolWindowPanel(private val project: Project) {
                 val splitPane = JSplitPane(JSplitPane.HORIZONTAL_SPLIT, searchBox, filterBox).apply {
                     setDividerLocation(0.5)
                     resizeWeight = 0.5
-                    dividerSize = 1
+                    dividerSize = 4
                     border = JBUI.Borders.empty()
                 }
                 criteriaContainer.add(splitPane, BorderLayout.CENTER)
@@ -434,10 +456,9 @@ class MyToolWindowPanel(private val project: Project) {
             isFilterVisible -> {
                 criteriaContainer.add(filterBox, BorderLayout.CENTER)
             }
-            else -> {
-                criteriaContainer.add(JPanel(), BorderLayout.CENTER)
-            }
         }
+
+        updateSplitPaneVisibility()
 
         criteriaContainer.revalidate()
         criteriaContainer.repaint()

@@ -1,5 +1,6 @@
 package com.github.meteors87.assmartlogcheck.toolWindow
 
+import com.github.meteors87.assmartlogcheck.contants.WindowsConstants
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
@@ -15,6 +16,8 @@ import java.awt.Color
 import java.awt.Dimension
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
+import java.awt.event.FocusAdapter
+import java.awt.event.FocusEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.MouseMotionAdapter
@@ -32,6 +35,8 @@ import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
 import javax.swing.text.StyledDocument
 import java.util.regex.Pattern
+import javax.swing.event.DocumentEvent
+import javax.swing.event.DocumentListener
 
 class MyToolWindowPanel(private val project: Project) {
 
@@ -56,6 +61,10 @@ class MyToolWindowPanel(private val project: Project) {
     private var filterBoxHeight = 90
     private val minBoxHeight = 60   // 最小高度（约2行）
     private val maxBoxHeight = 250  // 最大高度（约8行）
+
+
+    private val filterStringSet = mutableSetOf<String>()
+    private val searchStringSet = mutableSetOf<String>()
 
     init {
         mainPanel = createPanel()
@@ -83,8 +92,20 @@ class MyToolWindowPanel(private val project: Project) {
         val buttonPanel = JBPanel<JBPanel<*>>(java.awt.FlowLayout(java.awt.FlowLayout.LEFT))
 
         // 创建搜索框（初始隐藏）
-        searchBox = createCriteriaBox("Search 条件", searchFields, { hideSearchBox() }, { searchBoxHeight }, { searchBoxHeight = it })
-        filterBox = createCriteriaBox("Filter 条件", filterFields, { hideFilterBox() }, { filterBoxHeight }, { filterBoxHeight = it })
+        searchBox = createCriteriaBox(
+            "Search 条件",
+            WindowsConstants.STRING_TYPE_SEARCH,
+            searchFields,
+            { hideSearchBox() },
+            { searchBoxHeight },
+            { searchBoxHeight = it })
+        filterBox = createCriteriaBox(
+            "Filter 条件",
+            WindowsConstants.STRING_TYPE_FILTER,
+            filterFields,
+            { hideFilterBox() },
+            { filterBoxHeight },
+            { filterBoxHeight = it })
 
         criteriaContainer = JBPanel<JBPanel<*>>(BorderLayout())
 
@@ -213,6 +234,7 @@ class MyToolWindowPanel(private val project: Project) {
      */
     private fun createCriteriaBox(
         title: String,
+        type: String,
         fields: MutableList<JBTextField>,
         onHide: () -> Unit,
         getHeightRef: () -> Int,
@@ -301,7 +323,7 @@ class MyToolWindowPanel(private val project: Project) {
         val addButton = JButton("+").apply {
             toolTipText = "添加条件"
             addActionListener {
-                addCriteriaRow(rowsPanel, fields)
+                addCriteriaRow(rowsPanel, fields, type)
 
                 // 关键：先强制布局，确保新行被正确计算
                 rowsPanel.revalidate()
@@ -354,7 +376,7 @@ class MyToolWindowPanel(private val project: Project) {
 
         // 初始添加一行
         if (fields.isEmpty()) {
-            addCriteriaRow(rowsPanel, fields)
+            addCriteriaRow(rowsPanel, fields, type)
         }
 
         return panel
@@ -363,7 +385,7 @@ class MyToolWindowPanel(private val project: Project) {
     /**
      * 添加一行搜索条件（带减号删除按钮）
      */
-    private fun addCriteriaRow(rowsPanel: JPanel, fields: MutableList<JBTextField>) {
+    private fun addCriteriaRow(rowsPanel: JPanel, fields: MutableList<JBTextField>, type: String) {
         val rowPanel = JBPanel<JBPanel<*>>(BorderLayout()).apply {
             border = JBUI.Borders.empty(2)
             maximumSize = Dimension(Int.MAX_VALUE, 28)
@@ -372,6 +394,33 @@ class MyToolWindowPanel(private val project: Project) {
 
         val textField = JBTextField().apply {
             emptyText.text = "输入条件..."
+            var previousText = ""
+
+            document.addDocumentListener(object : DocumentListener {
+                override fun insertUpdate(e: DocumentEvent?) = onTextChanged()
+                override fun removeUpdate(e: DocumentEvent?) = onTextChanged()
+                override fun changedUpdate(e: DocumentEvent?) = onTextChanged()
+
+                private fun onTextChanged() {
+                    val currentText = text?.trim() ?: ""
+
+                    if (currentText == previousText) return
+
+                    if (previousText.isNotEmpty()) {
+                        when (type) {
+                            WindowsConstants.STRING_TYPE_SEARCH -> searchStringSet.remove(previousText)
+                            WindowsConstants.STRING_TYPE_FILTER -> filterStringSet.remove(previousText)
+                        }
+                    }
+
+                    if (currentText.isNotEmpty()) {
+                        when (type) {
+                            WindowsConstants.STRING_TYPE_SEARCH -> searchStringSet.add(currentText)
+                            WindowsConstants.STRING_TYPE_FILTER -> filterStringSet.add(currentText)
+                        }
+                    }
+                }
+            })
         }
 
         // 减号按钮（删除当前行）
@@ -450,9 +499,11 @@ class MyToolWindowPanel(private val project: Project) {
                 }
                 criteriaContainer.add(splitPane, BorderLayout.CENTER)
             }
+
             isSearchVisible -> {
                 criteriaContainer.add(searchBox, BorderLayout.CENTER)
             }
+
             isFilterVisible -> {
                 criteriaContainer.add(filterBox, BorderLayout.CENTER)
             }
@@ -491,7 +542,8 @@ class MyToolWindowPanel(private val project: Project) {
 
     private fun appendStyledLog(textPane: JTextPane, line: String) {
         try {
-            val logPattern = Pattern.compile("""^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEF])\s+([^:]+):\s*(.*)$""")
+            val logPattern =
+                Pattern.compile("""^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEF])\s+([^:]+):\s*(.*)$""")
             val matcher = logPattern.matcher(line)
 
             if (matcher.find()) {
@@ -501,6 +553,15 @@ class MyToolWindowPanel(private val project: Project) {
                 val level = matcher.group(4)
                 val tag = matcher.group(5)
                 val message = matcher.group(6)
+
+                searchStringSet.remove("")
+                if (searchStringSet.isNotEmpty() && !searchStringSet.parallelStream().anyMatch { message.contains(it) }) {
+                    return
+                }
+                filterStringSet.remove("")
+                if (filterStringSet.isNotEmpty() && !filterStringSet.parallelStream().anyMatch { tag.contains(it) }) {
+                    return
+                }
 
                 insertColoredText("$timestamp ", JBColor.GRAY)
                 insertColoredText("$pid $tid ", JBColor.GRAY)
